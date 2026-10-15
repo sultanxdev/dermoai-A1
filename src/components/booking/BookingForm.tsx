@@ -1,312 +1,313 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { clientData } from "@/config/clientData";
-import { 
-  generateWhatsAppMessage, 
-  redirectToWhatsApp, 
-  formatPhoneForWhatsApp 
-} from "@/lib/whatsapp";
-import { trackAppointmentSubmitted, trackConversion } from "@/lib/analytics";
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { CheckCircle2, AlertCircle, Loader2, MessageCircle, Wrench, ArrowRight } from 'lucide-react';
+import { clientData } from '@/config/clientData';
+import { createWhatsAppLink, generateEnquiryWhatsAppMessage } from '@/lib/whatsapp';
 
-// ==================== VALIDATION SCHEMA ====================
-const bookingSchema = z.object({
-  name: z.string()
-    .min(2, "Name must be at least 2 characters")
-    .max(50, "Name must be less than 50 characters"),
-  
-  phone: z.string()
-    .regex(/^[0-9+\-\s()]{10,}$/, "Please enter a valid phone number"),
-  
-  treatment: z.string()
-    .min(1, "Please select a treatment"),
-  
-  preferredDate: z.string().optional(),
-  preferredTime: z.string().optional(),
-  message: z.string().max(500, "Message must be less than 500 characters").optional(),
-  website: z.string().max(0, "Invalid form submission").optional(),
+const enquirySchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(60, 'Name must be under 60 characters'),
+  phone: z
+    .string()
+    .regex(/^[0-9+\-\s()]{10,15}$/, 'Please enter a valid 10-digit phone number'),
+  applianceType: z
+    .string()
+    .min(1, 'Please select your appliance type'),
+  locality: z.string().optional(),
+  problemDescription: z
+    .string()
+    .min(5, 'Please briefly describe the problem (at least 5 characters)')
+    .max(500, 'Description must be under 500 characters'),
+  honeyPot: z.string().max(0, 'Spam detected').optional(),
 });
 
-type BookingFormData = z.infer<typeof bookingSchema>;
+type EnquiryFormData = z.infer<typeof enquirySchema>;
 
 export default function BookingForm() {
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { colors, booking, treatments, appointment, contact } = clientData;
-  const PRIMARY = colors.primary;
-  const BG = colors.background;
-  const ACCENT = colors.accent;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionSuccess, setSubmissionSuccess] = useState<boolean>(false);
+  const [submissionData, setSubmissionData] = useState<any>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
-  } = useForm<BookingFormData>({
-    resolver: zodResolver(bookingSchema),
+    formState: { errors },
+  } = useForm<EnquiryFormData>({
+    resolver: zodResolver(enquirySchema),
     defaultValues: {
-      treatment: "",
-      preferredDate: "",
-      preferredTime: "",
-      message: "",
-      website: "",
+      name: '',
+      phone: '',
+      applianceType: clientData.enquiryForm.applianceOptions[0] || 'Single Door Refrigerator',
+      locality: '',
+      problemDescription: '',
+      honeyPot: '',
     },
   });
 
-  const onSubmit = async (data: BookingFormData) => {
+  const onSubmit = async (data: EnquiryFormData) => {
+    setIsSubmitting(true);
+    setServerError(null);
+
     try {
-      setLoading(true);
-      setError(null);
-
-      trackAppointmentSubmitted(data.treatment);
-
-      try {
-        await fetch("/api/book-appointment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: data.name,
-            phone: data.phone,
-            treatment: data.treatment,
-            preferredDate: data.preferredDate,
-            preferredTime: data.preferredTime,
-            message: data.message,
-            source: "Website Booking Form",
-          }),
-        });
-      } catch {
-        // Fallback gracefully even if backend route isn't set up yet
-      }
-
-      trackConversion(data.treatment);
-      setSuccess(true);
-
-      const whatsappMessage = generateWhatsAppMessage({
-        name: data.name,
-        treatment: data.treatment,
-        preferredDate: data.preferredDate,
-        preferredTime: data.preferredTime,
-        message: data.message,
+      const response = await fetch('/api/enquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          phone: data.phone,
+          applianceType: data.applianceType,
+          problemDescription: data.problemDescription,
+          locality: data.locality || '',
+        }),
       });
 
-      const formattedPhone = formatPhoneForWhatsApp(contact.whatsappNumber);
+      const result = await response.json();
 
-      setTimeout(() => {
-        redirectToWhatsApp(formattedPhone, whatsappMessage);
-      }, 900);
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to submit enquiry');
+      }
 
-      setTimeout(() => {
-        reset();
-        setSuccess(false);
-      }, 4000);
-
+      setSubmissionSuccess(true);
+      setSubmissionData(result.data);
+      reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit booking. Please try again.");
-      setSuccess(false);
+      console.error('Enquiry submission error:', err);
+      setServerError(
+        err instanceof Error ? err.message : 'Something went wrong. Please call or WhatsApp us directly.'
+      );
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  return (
-    <div className="w-full p-6 sm:p-8 lg:p-10 rounded-2xl sm:rounded-3xl">
-      <div className="mb-6 sm:mb-8">
-        <span
-          className="inline-block text-xs font-mono font-semibold uppercase tracking-widest px-2.5 py-1 rounded-md mb-2"
-          style={{ backgroundColor: `${PRIMARY}10`, color: ACCENT }}
-        >
-          Instant Confirmation
-        </span>
-        <h3 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: PRIMARY }}>
-          {booking?.formTitle || appointment?.formTitle || "Book an Appointment"}
+  if (submissionSuccess && submissionData) {
+    const waLink = createWhatsAppLink(
+      clientData.contact.whatsappNumber,
+      generateEnquiryWhatsAppMessage({
+        name: submissionData.name,
+        phone: submissionData.phone,
+        applianceType: submissionData.applianceType,
+        problemDescription: submissionData.problemDescription,
+        locality: submissionData.locality,
+      })
+    );
+
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 sm:p-8 text-center animate-in fade-in duration-300">
+        <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 className="w-8 h-8" />
+        </div>
+
+        <h3 className="text-xl font-extrabold text-slate-900 mb-2">
+          Service Request Received!
         </h3>
-        <p className="mt-1 text-sm sm:text-base leading-relaxed" style={{ color: `${PRIMARY}99` }}>
-          {booking?.formSubtitle || appointment?.formSubTitle || "We will confirm your consultation slot promptly."}
+
+        <p className="text-sm text-slate-600 max-w-md mx-auto mb-4">
+          Thank you, <strong>{submissionData.name}</strong>. Your enquiry ID is{' '}
+          <span className="font-mono font-bold text-emerald-800">{submissionData.id}</span>.
+          Our technician will call you shortly to confirm your slot.
         </p>
+
+        <div className="bg-white rounded-xl p-4 border border-emerald-200/80 max-w-sm mx-auto text-left text-xs space-y-1 mb-6">
+          <p>
+            <span className="font-semibold text-slate-500">Appliance:</span>{' '}
+            <span className="text-slate-800">{submissionData.applianceType}</span>
+          </p>
+          <p>
+            <span className="font-semibold text-slate-500">Contact:</span>{' '}
+            <span className="text-slate-800">{submissionData.phone}</span>
+          </p>
+          {submissionData.locality && (
+            <p>
+              <span className="font-semibold text-slate-500">Locality:</span>{' '}
+              <span className="text-slate-800">{submissionData.locality}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm shadow-md transition-colors"
+          >
+            <MessageCircle className="w-4 h-4 fill-white" />
+            <span>Notify Technician on WhatsApp</span>
+          </a>
+
+          <button
+            onClick={() => setSubmissionSuccess(false)}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors"
+          >
+            Submit Another Request
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-lg">
+      <div className="flex items-center gap-2.5 mb-6 pb-4 border-b border-slate-100">
+        <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 leading-tight">
+            {clientData.enquiryForm.title}
+          </h3>
+          <p className="text-xs text-slate-500">
+            {clientData.enquiryForm.subtitle}
+          </p>
+        </div>
       </div>
 
-      {success && (
-        <div
-          className="mb-6 p-4 rounded-xl text-sm font-medium transition-all"
-          style={{ backgroundColor: `${PRIMARY}12`, color: PRIMARY, border: `1px solid ${PRIMARY}30` }}
-        >
-          {booking?.successMessage || "✅ Your appointment request is confirmed! Redirecting to WhatsApp..."}
+      {serverError && (
+        <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{serverError}</span>
         </div>
       )}
 
-      {error && (
-        <div
-          className="mb-6 p-4 rounded-xl text-sm font-medium"
-          style={{ backgroundColor: `${ACCENT}15`, color: ACCENT, border: `1px solid ${ACCENT}30` }}
-        >
-          ⚠️ {error}
-        </div>
-      )}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Anti-spam honeypot (hidden) */}
+        <input
+          type="text"
+          {...register('honeyPot')}
+          className="hidden"
+          tabIndex={-1}
+          autoComplete="off"
+        />
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 sm:space-y-5">
-        {/* Full Name */}
-        <div>
-          <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-            Full Name <span style={{ color: ACCENT }}>*</span>
-          </label>
-          <input
-            type="text"
-            {...register("name")}
-            placeholder="e.g. Rahul Sharma"
-            className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none"
-            style={{
-              backgroundColor: `${BG}80`,
-              border: `1px solid ${errors.name ? ACCENT : `${PRIMARY}25`}`,
-              color: PRIMARY,
-            }}
-            disabled={loading}
-          />
-          {errors.name && (
-            <p className="text-xs mt-1" style={{ color: ACCENT }}>{errors.name.message}</p>
-          )}
-        </div>
-
-        {/* Phone */}
-        <div>
-          <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-            Phone Number <span style={{ color: ACCENT }}>*</span>
-          </label>
-          <input
-            type="tel"
-            {...register("phone")}
-            placeholder="+91 98765 43210"
-            className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none"
-            style={{
-              backgroundColor: `${BG}80`,
-              border: `1px solid ${errors.phone ? ACCENT : `${PRIMARY}25`}`,
-              color: PRIMARY,
-            }}
-            disabled={loading}
-          />
-          {errors.phone && (
-            <p className="text-xs mt-1" style={{ color: ACCENT }}>{errors.phone.message}</p>
-          )}
-        </div>
-
-        {/* Treatment Select */}
-        <div>
-          <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-            Treatment / Concern <span style={{ color: ACCENT }}>*</span>
-          </label>
-          <select
-            {...register("treatment")}
-            className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none cursor-pointer"
-            style={{
-              backgroundColor: `${BG}80`,
-              border: `1px solid ${errors.treatment ? ACCENT : `${PRIMARY}25`}`,
-              color: PRIMARY,
-            }}
-            disabled={loading}
-          >
-            <option value="">Select Treatment Concern</option>
-            {treatments.map((t) => (
-              <option key={t.id} value={t.name}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          {errors.treatment && (
-            <p className="text-xs mt-1" style={{ color: ACCENT }}>{errors.treatment.message}</p>
-          )}
-        </div>
-
-        {/* Preferred Date & Time */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        {/* Name & Phone Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-              Preferred Date
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Your Full Name <span className="text-rose-500">*</span>
             </label>
             <input
-              type="date"
-              {...register("preferredDate")}
-              className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none"
-              style={{
-                backgroundColor: `${BG}80`,
-                border: `1px solid ${PRIMARY}25`,
-                color: PRIMARY,
-              }}
-              disabled={loading}
+              type="text"
+              placeholder="e.g. Suresh Kumar"
+              {...register('name')}
+              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 focus:bg-white text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                errors.name ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300'
+              }`}
             />
+            {errors.name && (
+              <p className="text-rose-600 text-[11px] font-medium mt-1">
+                {errors.name.message}
+              </p>
+            )}
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-              Preferred Time
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Phone Number <span className="text-rose-500">*</span>
             </label>
             <input
-              type="time"
-              {...register("preferredTime")}
-              className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none"
-              style={{
-                backgroundColor: `${BG}80`,
-                border: `1px solid ${PRIMARY}25`,
-                color: PRIMARY,
-              }}
-              disabled={loading}
+              type="tel"
+              placeholder="e.g. 98765 43210"
+              {...register('phone')}
+              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 focus:bg-white text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                errors.phone ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300'
+              }`}
+            />
+            {errors.phone && (
+              <p className="text-rose-600 text-[11px] font-medium mt-1">
+                {errors.phone.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Appliance Type & Locality Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Appliance Type <span className="text-rose-500">*</span>
+            </label>
+            <select
+              {...register('applianceType')}
+              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 focus:bg-white text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                errors.applianceType ? 'border-rose-300' : 'border-slate-300'
+              }`}
+            >
+              {clientData.enquiryForm.applianceOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+            {errors.applianceType && (
+              <p className="text-rose-600 text-[11px] font-medium mt-1">
+                {errors.applianceType.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Locality / City Area
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Lajpat Nagar / Dwarka"
+              {...register('locality')}
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-slate-50 focus:bg-white text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
         </div>
 
-        {/* Additional Message */}
+        {/* Problem Description */}
         <div>
-          <label className="block text-xs sm:text-sm font-medium mb-1.5" style={{ color: PRIMARY }}>
-            Additional Notes (Optional)
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Describe the Problem <span className="text-rose-500">*</span>
           </label>
           <textarea
-            {...register("message")}
-            placeholder="Tell us any symptoms, past treatments, or queries..."
             rows={3}
-            className="w-full px-4 py-3 rounded-xl text-sm sm:text-base transition-all outline-none resize-none"
-            style={{
-              backgroundColor: `${BG}80`,
-              border: `1px solid ${PRIMARY}25`,
-              color: PRIMARY,
-            }}
-            disabled={loading}
+            placeholder="e.g. Fridge is not cooling, compressor making clicking noise, water leaking underneath..."
+            {...register('problemDescription')}
+            className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 focus:bg-white text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+              errors.problemDescription ? 'border-rose-300 bg-rose-50/50' : 'border-slate-300'
+            }`}
           />
+          {errors.problemDescription && (
+            <p className="text-rose-600 text-[11px] font-medium mt-1">
+              {errors.problemDescription.message}
+            </p>
+          )}
         </div>
-
-        {/* Honeypot */}
-        <input type="hidden" {...register("website")} style={{ display: "none" }} />
 
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={loading || isSubmitting}
-          className="w-full py-4 px-6 rounded-xl font-semibold text-base sm:text-lg transition-all duration-300 shadow-md hover:shadow-lg active:scale-[0.99] flex items-center justify-center gap-2"
-          style={{
-            backgroundColor: PRIMARY,
-            color: BG,
-          }}
+          disabled={isSubmitting}
+          className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white shadow-md transition-all flex items-center justify-center gap-2 active:scale-98"
         >
-          {loading || isSubmitting ? (
+          {isSubmitting ? (
             <>
-              <span className="inline-block w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${BG} transparent` }} />
-              Connecting...
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Submitting Request...</span>
             </>
           ) : (
             <>
-              Confirm Consultation Request
-              <svg className="w-5 h-5 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
+              <span>Request Doorstep Inspection</span>
+              <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>
 
-        <p className="text-center text-xs mt-3" style={{ color: `${PRIMARY}80` }}>
-          🔒 Your details are secure and directly shared with our clinical team.
+        <p className="text-[11px] text-slate-400 text-center">
+          🔒 Your details are safe with us. We only use them to confirm your repair visit.
         </p>
       </form>
     </div>

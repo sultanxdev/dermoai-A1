@@ -1,121 +1,93 @@
-import { clientData } from '@/config/clientData';
+import { clientData } from "@/config/clientData";
 
 /**
- * JSON-LD Structured Data Component
- *
- * Injects rich schema markup into <head> so Google can display:
- * - Clinic name, address, phone in search results
- * - Doctor qualifications in Knowledge Panel
- * - Star ratings
- * - Opening hours
- * - Services list
- *
- * Test your schema at: https://search.google.com/test/rich-results
+ * JSON-LD Structured Data Component for Local Appliance Repair Business
+ * Helps Google display Rich Snippets, Local Pack, Reviews & FAQs
  */
 export default function JsonLd() {
-  const { brand, contact, aboutDoctor, services, social, seo, testimonials } = clientData;
+  const { business, contact, services, seo, testimonials, faqs } = clientData;
 
-  // Average rating from testimonials
   const avgRating =
     testimonials.reduce((sum, t) => sum + t.rating, 0) / testimonials.length;
 
   const schema = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      // ── MedicalBusiness (the clinic) ──────────────────────
+    "@context": "https://schema.org",
+    "@graph": [
+      // ── Local Appliance Repair Business ────────────────────
       {
-        '@type': ['MedicalBusiness', 'Dermatology'],
-        '@id': `${seo.siteUrl}/#clinic`,
-        name: brand.name,
+        "@type": ["LocalBusiness", "HomeAndConstructionBusiness"],
+        "@id": `${seo.siteUrl}/#business`,
+        name: business.name,
         description: seo.metaDescription,
         url: seo.siteUrl,
         telephone: contact.phone,
         email: contact.email,
+        priceRange: "₹₹",
+        currenciesAccepted: "INR",
+        paymentAccepted: "Cash, UPI, Credit Card, Debit Card",
         address: {
-          '@type': 'PostalAddress',
+          "@type": "PostalAddress",
           streetAddress: contact.address,
-          addressCountry: 'IN',
+          addressLocality: contact.city,
+          addressRegion: contact.state,
+          postalCode: contact.pincode,
+          addressCountry: "IN",
+        },
+        geo: {
+          "@type": "GeoCoordinates",
+          latitude: "28.6139",
+          longitude: "77.2090",
         },
         openingHoursSpecification: [
           {
-            '@type': 'OpeningHoursSpecification',
-            dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-            opens: '10:00',
-            closes: '19:00',
+            "@type": "OpeningHoursSpecification",
+            dayOfWeek: [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday",
+            ],
+            opens: "08:00",
+            closes: "21:00",
           },
         ],
-        image: `${seo.siteUrl}${aboutDoctor.imageUrl}`,
-        logo: {
-          '@type': 'ImageObject',
-          url: `${seo.siteUrl}/favicon.ico`,
-        },
-        priceRange: '₹₹',
-        currenciesAccepted: 'INR',
-        paymentAccepted: 'Cash, Card, UPI',
-        sameAs: [
-          social.instagram,
-          social.facebook,
-          social.linkedin,
-          social.whatsapp,
-        ].filter(Boolean),
+        image: business.photoUrl,
         aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: avgRating.toFixed(1),
-          reviewCount: testimonials.length,
-          bestRating: '5',
-          worstRating: '1',
+          "@type": "AggregateRating",
+          ratingValue: business.rating || avgRating.toFixed(1),
+          reviewCount: business.reviewCount || testimonials.length,
+          bestRating: "5",
+          worstRating: "1",
         },
-        hasMap: `https://maps.google.com/?q=${encodeURIComponent(contact.address)}`,
-        employee: [
-          {
-            '@type': 'Physician',
-            '@id': `${seo.siteUrl}/#doctor`,
-            name: aboutDoctor.name,
-            description: aboutDoctor.bioParagraphs.join(' '),
-            qualifications: aboutDoctor.credentials,
-            image: `${seo.siteUrl}${aboutDoctor.imageUrl}`,
-            worksFor: { '@id': `${seo.siteUrl}/#clinic` },
-            medicalSpecialty: 'Dermatology',
-          },
-        ],
-        // Services offered
+        hasMap: contact.googleMapsUrl || `https://maps.google.com/?q=${encodeURIComponent(contact.address)}`,
         availableService: services.map((s) => ({
-          '@type': 'MedicalProcedure',
+          "@type": "Service",
           name: s.title,
-          description: s.description,
+          description: s.shortDescription,
         })),
       },
 
-      // ── WebSite (enables Google Sitelinks Search Box) ────
+      // ── WebSite Schema ──────────────────────────────────────
       {
-        '@type': 'WebSite',
-        '@id': `${seo.siteUrl}/#website`,
+        "@type": "WebSite",
+        "@id": `${seo.siteUrl}/#website`,
         url: seo.siteUrl,
-        name: brand.name,
+        name: business.name,
         description: seo.metaDescription,
-        inLanguage: 'en-IN',
+        inLanguage: "en-IN",
       },
 
-      // ── WebPage (the homepage) ────────────────────────────
+      // ── FAQPage Schema ──────────────────────────────────────
       {
-        '@type': 'WebPage',
-        '@id': `${seo.siteUrl}/#webpage`,
-        url: seo.siteUrl,
-        name: `${brand.name} | ${brand.tagline}`,
-        isPartOf: { '@id': `${seo.siteUrl}/#website` },
-        about: { '@id': `${seo.siteUrl}/#clinic` },
-        description: seo.metaDescription,
-        inLanguage: 'en-IN',
-      },
-
-      // ── FAQPage (boosts FAQ rich results in Google) ───────
-      {
-        '@type': 'FAQPage',
-        mainEntity: clientData.faqs.map((faq) => ({
-          '@type': 'Question',
+        "@type": "FAQPage",
+        mainEntity: faqs.map((faq) => ({
+          "@type": "Question",
           name: faq.question,
           acceptedAnswer: {
-            '@type': 'Answer',
+            "@type": "Answer",
             text: faq.answer,
           },
         })),

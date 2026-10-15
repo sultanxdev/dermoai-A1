@@ -1,2 +1,0 @@
-# dr
-# dermoai-A1

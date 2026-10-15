@@ -4,10 +4,14 @@ import React from "react";
 import { clientData } from "@/config/clientData";
 import { trackCallClick, trackWhatsAppClick } from "@/lib/analytics";
 import { Phone, MessageCircle, Calendar } from "lucide-react";
-import { createWhatsAppLink } from "@/lib/whatsapp";
 
 export default function StickyCTA() {
-  const { contact } = clientData;
+  const { colors, contact, booking } = clientData;
+  if (booking && booking.stickyCtaEnabled === false) return null;
+
+  const PRIMARY = colors.primary;
+  const BG = colors.background;
+  const ACCENT = colors.accent;
 
   const handleCall = () => {
     trackCallClick();
@@ -15,12 +19,11 @@ export default function StickyCTA() {
   };
 
   const handleWhatsApp = () => {
-    trackWhatsAppClick("Sticky Bar");
-    const waUrl = createWhatsAppLink(
-      contact.whatsappNumber,
-      clientData.whatsapp.defaultMessage
-    );
-    window.open(waUrl, "_blank");
+    trackWhatsAppClick("Sticky WhatsApp");
+    const message = `Hi ${clientData.brand.name}, I would like to book a consultation.`;
+    const encodedMessage = encodeURIComponent(message);
+    const phone = contact.whatsappNumber;
+    window.open(`https://wa.me/${phone}?text=${encodedMessage}`, "_blank");
   };
 
   const handleBook = () => {
@@ -33,36 +36,52 @@ export default function StickyCTA() {
   return (
     <aside
       aria-label="Mobile quick actions"
-      className="fixed bottom-0 left-0 right-0 md:hidden z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+      className="fixed bottom-0 left-0 right-0 md:hidden z-40 border-t backdrop-blur-md px-3 py-2.5 shadow-2xl"
+      style={{
+        backgroundColor: 'rgba(245, 246, 240, 0.96)',
+        borderColor: `${PRIMARY}20`,
+      }}
     >
       <div className="flex items-center gap-2 max-w-md mx-auto">
-        {/* CALL NOW */}
+        {/* CALL */}
         <button
           onClick={handleCall}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm bg-sky-600 active:bg-sky-700 text-white shadow-sm transition-transform active:scale-95"
-          title="Call Technician"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-medium text-xs sm:text-sm transition-all active:scale-95"
+          style={{
+            backgroundColor: `${PRIMARY}12`,
+            color: PRIMARY,
+          }}
+          title="Call clinic"
         >
-          <Phone className="w-4 h-4 fill-white" />
-          <span>Call Now</span>
+          <Phone size={16} />
+          <span>Call</span>
         </button>
 
         {/* WHATSAPP */}
         <button
           onClick={handleWhatsApp}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 active:bg-emerald-700 text-white shadow-sm transition-transform active:scale-95"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-medium text-xs sm:text-sm transition-all active:scale-95"
+          style={{
+            backgroundColor: PRIMARY,
+            color: BG,
+          }}
           title="Chat on WhatsApp"
         >
-          <MessageCircle className="w-4 h-4 fill-white" />
+          <MessageCircle size={16} />
           <span>WhatsApp</span>
         </button>
 
-        {/* BOOK VISIT */}
+        {/* BOOK APPOINTMENT */}
         <button
           onClick={handleBook}
-          className="flex-none flex items-center justify-center gap-1 py-3 px-3 rounded-xl font-semibold text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all"
-          title="Book Doorstep Visit"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-medium text-xs sm:text-sm transition-all active:scale-95"
+          style={{
+            backgroundColor: ACCENT,
+            color: BG,
+          }}
+          title="Book appointment"
         >
-          <Calendar className="w-4 h-4 text-slate-600" />
+          <Calendar size={16} />
           <span>Book</span>
         </button>
       </div>

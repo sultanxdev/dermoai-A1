@@ -60,7 +60,9 @@ export default function Testimonials() {
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                     <span>{review.name}</span>
-                    <CheckCircle className="w-4 h-4 text-emerald-600" title="Verified Customer" />
+                    <span title="Verified Customer">
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    </span>
                   </h4>
                   <p className="text-xs text-slate-500">
                     {review.locality}

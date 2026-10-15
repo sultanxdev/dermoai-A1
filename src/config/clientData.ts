@@ -234,9 +234,9 @@ export const clientData = {
   //  Background (Warm White): #F5F6F0
   //  Accent (Coral Red): #E64435
   colors: {
-    primary: "#4B624A",
+    primary: "#282B4A",
     primaryHover: "#3A4E39",
-    accent: "#553E53",
+    accent: "#FAF8F5",
     background: "#F5F6F0",
     textMain: "#4B624A",
     textMuted: "#4B624A",
